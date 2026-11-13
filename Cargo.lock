@@ -7895,6 +7895,7 @@ dependencies = [
  "bevy_platform",
  "log",
  "regex",
+ "serde_json",
  "yarnspinner_compiler",
  "yarnspinner_core",
  "yarnspinner_runtime",

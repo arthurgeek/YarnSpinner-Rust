@@ -27,6 +27,8 @@ mod variable_storage;
 mod virtual_machine;
 
 pub use dialogue::Result;
+#[cfg(feature = "serde")]
+pub use virtual_machine::checkpoint::{CheckpointError, DialogueCheckpoint};
 
 /// Everything you need to get starting using the Yarn Spinner runtime.
 pub mod prelude {
@@ -40,6 +42,8 @@ pub mod prelude {
         vec::Vec,
     };
 
+    #[cfg(feature = "serde")]
+    pub use crate::{CheckpointError, DialogueCheckpoint};
     pub use crate::{
         analyser::*,
         command::*,

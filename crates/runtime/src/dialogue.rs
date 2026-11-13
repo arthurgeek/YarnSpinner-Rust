@@ -38,6 +38,10 @@ pub enum DialogueError {
         selected_line_id: LineId,
         line_ids: Vec<LineId>,
     },
+    /// A host-specified instruction budget was exhausted.
+    InstructionLimitExceeded {
+        limit: u32,
+    },
     UnexpectedOptionSelectionError,
     ContinueOnOptionSelectionError,
     NoNodeSelectedOnContinue,
@@ -74,6 +78,7 @@ impl Display for DialogueError {
                 let line_ids = line_ids.iter().map(|id| id.0.clone()).collect::<Vec<_>>().join(", ");
                 write!(f, "{selected_line_id:?} is not a valid line ID of options (expected line ids: {line_ids}.")
             },
+            InstructionLimitExceeded { limit } => write!(f, "dialogue instruction limit exceeded: {limit}"),
             UnexpectedOptionSelectionError => f.write_str("An option was selected, but the dialogue wasn't waiting for a selection. This method should only be called after the Dialogue is waiting for the user to select an option."),
             ContinueOnOptionSelectionError => f.write_str("Dialogue was asked to continue running, but it is waiting for the user to select an option first."),
             NoNodeSelectedOnContinue => f.write_str("Cannot continue running dialogue. No node has been selected."),
@@ -526,4 +531,45 @@ mod tests {
     }
 
     fn accept_send_sync(_: impl Send + Sync) {}
+}
+
+#[cfg(feature = "serde")]
+impl Dialogue {
+    /// Captures VM continuation only. The host separately persists variables,
+    /// content identity, providers/functions, pending UI and application effects.
+    pub fn checkpoint(
+        &self,
+    ) -> core::result::Result<crate::DialogueCheckpoint, crate::CheckpointError> {
+        self.vm.checkpoint()
+    }
+
+    /// Restores an opaque checkpoint into a fresh dialogue with the identical
+    /// compiled program. The host must validate its content identity first.
+    /// Validation finishes before VM state is replaced; host services stay bound.
+    pub fn restore_checkpoint(
+        &mut self,
+        checkpoint: crate::DialogueCheckpoint,
+    ) -> core::result::Result<(), crate::CheckpointError> {
+        let language = checkpoint.language_code().cloned();
+        self.vm.restore_checkpoint(checkpoint)?;
+        self.language_code = language;
+        Ok(())
+    }
+}
+
+impl Dialogue {
+    /// Continues with a host instruction limit. On error, discard or restore the
+    /// dialogue and host state before retrying; this method is not a transaction.
+    pub fn continue_with_instruction_limit(&mut self, limit: u32) -> Result<Vec<DialogueEvent>> {
+        let mut remaining = limit;
+        self.vm.continue_(|vm, instruction| {
+            if remaining == 0 {
+                return Err(DialogueError::InstructionLimitExceeded { limit });
+            }
+            remaining -= 1;
+            vm.run_instruction(instruction, |function, parameters| {
+                function.call(parameters)
+            })
+        })
+    }
 }

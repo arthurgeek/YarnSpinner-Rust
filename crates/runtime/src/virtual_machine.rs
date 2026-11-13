@@ -10,6 +10,8 @@ use crate::prelude::*;
 use core::fmt::Debug;
 use log::*;
 
+#[cfg(feature = "serde")]
+pub(crate) mod checkpoint;
 mod execution_state;
 mod state;
 
